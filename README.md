@@ -3,7 +3,7 @@
 - Coding Language: [R]
 - Version: [version 4.1.1]
 - Required Packages: 
-	- ***
+	- ADD HERE
 
 # Usage
 
@@ -15,4 +15,4 @@ How to Use:
 
 # Further Reading
 - Crane PK, Carle A, Gibbons LE, et al. Development and assessment of a composite score for memory in the Alzheimer’s Disease Neuroimaging Initiative (ADNI). Brain Imaging Behav. 2012;6(4):502-516. doi:10.1007/s11682-012-9186-z
-- ***
+- ADD HERE
