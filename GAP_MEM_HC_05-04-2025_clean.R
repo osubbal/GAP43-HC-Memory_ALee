@@ -1,8 +1,3 @@
-#Annie Lee
-#ADNI GAP-43, HC, Memory Project
-#Updated: 11/12/2024
-#Cleaned, uploading to OneDrive
-
 #load in packages
 library(dplyr)
 library(polycor)
@@ -54,7 +49,7 @@ length(all_data_hc$RID) #N=789
 
 
 #----------------------- Clean AD biomarker data ------------------------------#
-#1. Truncate biomarkers
+#1. Clean biomarkers
 #Total Tau: 80 ≤ TAU ≤ 1300 pg/ML
 all_data_hc$TAU[as.numeric(all_data_hc$TAU) > 1300] <- 1300
 all_data_hc$TAU[as.numeric(all_data_hc$TAU) < 80] <- 80
@@ -943,8 +938,4 @@ fig2
 
 ggsave("data/Figure2.jpg", fig2, width = 190, units = "mm", dpi = 300, bg = "white")
 
-
-#------------------------------ End of Code------------------------------------#
-
-#For notes from previous abstract runs (INS) including triple interaction, see code 10-13-2024.R
 
