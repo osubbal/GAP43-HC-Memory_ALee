@@ -3,11 +3,15 @@
 - Coding Language: [R]
 - Version: [version 4.1.1]
 - Required Packages: 
-	- ADD HERE
+	- library(dplyr)
+ 	- library(polycor)
+	- library(psych)
+	- library(ggplot2)
+	- library(emmeans)
 
 # Usage
 
-Goal: Conduct relative importance analyses and hierarchical linear regressions to examine associations between biomarkers of neuronal and glial dysfunction, WMH volume, and cognition.
+Goal: Conduct hierarchical linear regressions to examine associations between CSF GAP-43, hippocampal volume (total and subfield volume), and episodic memory performance in older adults.
 Original Usage: [all data obtained from ADNI] Predictor variables = demographic variables, APOE4 status, CSF GAP-43, hippocampal volume (total and subfields [subiculum, presubiculum, dentate gyrus, CA1])  Outputs = composite scores of episodic memory
 
 How to Use: 
@@ -15,4 +19,3 @@ How to Use:
 
 # Further Reading
 - Crane PK, Carle A, Gibbons LE, et al. Development and assessment of a composite score for memory in the Alzheimer’s Disease Neuroimaging Initiative (ADNI). Brain Imaging Behav. 2012;6(4):502-516. doi:10.1007/s11682-012-9186-z
-- ADD HERE
