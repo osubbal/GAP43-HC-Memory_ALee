@@ -1,20 +1,23 @@
+#GAP43-HC-Memory_ALee
+
 #load in packages
 library(dplyr)
 library(polycor)
 library(psych)
 library(ggplot2)
 library(emmeans)
+library(interactions)
 
 #set directory
-#setwd("/Users/annielee/OneDrive/ADNI")
-setwd("/Users/oliviahorn/Library/CloudStorage/OneDrive-TheOhioStateUniversity/BBAL/Projects/BADS_2021E0199/ADNI/ADNI_Annie_GAP43-HC-Mem/working")
+#
+
 #Read in datasets
-adnimerge <- read.csv("data/ADNIMERGE.csv") #participant info and baseline HC
-uwn <- read.csv("data/UWNPSYCHSUM_03_09_21.csv") #neuropsych composite scores
-gap43 <- read.csv("data/BLENNOW_LAB_CSF_GAP_43_06_08_21.csv",header=T) #GAP-43
-upenn <- read.csv("data/UPENNBIOMK9_04_19_17.csv") #CSF biomarkers
-pet <- read.csv("data/UCBERKELEYFDG_8mm_02_17_23_22May2023.csv")
-ucsf <- read.csv("data/UCSFFSX51_11_08_19_15Mar2024.csv") #has both accelerated and non-accelerated t1, https://adni.bitbucket.io/reference/ucsffsx51.html
+adnimerge <- read.csv("/Users/annielee/OneDrive/ADNI/ADNIMERGE.csv") #participant info and baseline HC
+uwn <- read.csv("/Users/annielee/OneDrive/ADNI/UWNPSYCHSUM_03_09_21.csv") #neuropsych composite scores
+gap43 <- read.csv("/Users/annielee/OneDrive/ADNI/BLENNOW_LAB_CSF_GAP_43_06_08_21.csv",header=T) #GAP-43
+upenn <- read.csv("/Users/annielee/OneDrive/ADNI/UPENNBIOMK9_04_19_17.csv") #CSF biomarkers
+pet <- read.csv("/Users/annielee/OneDrive/ADNI/UCBERKELEYFDG_8mm_02_17_23_22May2023.csv")
+ucsf <- read.csv("/Users/annielee/OneDrive/ADNI/UCSFFSX51_11_08_19_15Mar2024.csv") #accelerated and non-accelerated t1, https://adni.bitbucket.io/reference/ucsffsx51.html
 
 #-----------------------------------------------------------------------------#
 #-----------------------CLEANING AND MERGING FILES----------------------------#
@@ -45,11 +48,11 @@ names(pet_filter)[names(pet_filter) == 'MEAN'] <- "metaROI"
 
 #Create baseline database with HC subfields ("all_data_hc")
 all_data_hc <- Reduce(function(x,y) merge(x,y, by=c("RID","VISCODE2")), list(adnimerge_filter,uwn_filter,gap43_filter,upenn_filter, pet_filter, ucsf_filter))
-length(all_data_hc$RID) #N=789
+length(all_data_hc$RID)
 
 
 #----------------------- Clean AD biomarker data ------------------------------#
-#1. Clean biomarkers
+#1. Truncate biomarkers
 #Total Tau: 80 ≤ TAU ≤ 1300 pg/ML
 all_data_hc$TAU[as.numeric(all_data_hc$TAU) > 1300] <- 1300
 all_data_hc$TAU[as.numeric(all_data_hc$TAU) < 80] <- 80
@@ -67,13 +70,6 @@ all_data_hc$ABETA[as.numeric(all_data_hc$ABETA) > 1700] <- 1700
 all_data_hc$ABETA[as.numeric(all_data_hc$ABETA) < 200] <- 200
 all_data_hc$ABETA <- as.numeric(all_data_hc$ABETA)
 
-#2. Binarize AD biomarkers to control for AT(N) group
-#Qing 2022 Reference:
-#A = Pathological ABeta1-42 defined as < 977 pg/ml
-#T = Pathological P-Tau181 defined as > 27 pg/ml
-#N = Pathological FDG-PET defined as < 1.21 
-# 1 = pathological ; 0 = not pathological
-
 # ABETA binarize (0 = non-pathological Abeta ; 1 = pathological Abeta)
 all_data_hc$ABETA <- as.numeric(all_data_hc$ABETA)
 for (i in 1:length(all_data_hc$ABETA)) {
@@ -83,9 +79,6 @@ for (i in 1:length(all_data_hc$ABETA)) {
     (all_data_hc$ABETA_atn[i] <- 0)
   }
 }
-
-table(all_data_hc$DX_bl,all_data_hc$ABETA_atn)
-table(all_data_hc$ABETA_atn)
 
 # P-TAU binarize
 all_data_hc$PTAU <- as.numeric(all_data_hc$PTAU)
@@ -97,9 +90,6 @@ for (i in 1:length(all_data_hc$PTAU)) {
   }
 }
 
-table(all_data_hc$DX_bl,all_data_hc$PTAU_atn)
-table(all_data_hc$PTAU_atn) 
-
 # NEURODEGENERATION
 all_data_hc$metaROI<- as.numeric(all_data_hc$metaROI)
 for (i in 1:length(all_data_hc$metaROI)) {
@@ -109,8 +99,6 @@ for (i in 1:length(all_data_hc$metaROI)) {
     (all_data_hc$PET_atn[i] <- 0)
   }
 }
-
-table(all_data_hc$PET_atn) #0=309, 1=254
 
 
 #2. Create ATN classification strings - "ATN_class" [A(+/-), T(+/-), N(+/-)]
@@ -139,7 +127,7 @@ for (i in 1:length(all_data_hc$PET_atn)) {
   }
 }
 
-all_data_hc$ATN_class <- as.factor(all_data_hc$ATN_class)
+
 
 #3. Create ATN classification groups groups -- "ATN_group" [CN, SNAP, AD]
 for (i in 1:length(all_data_hc$ATN_class)) {
@@ -152,8 +140,6 @@ for (i in 1:length(all_data_hc$ATN_class)) {
     (all_data_hc$ATN_group[i] <- "AD")
 }
 
-all_data_hc$ATN_group <- as.factor(all_data_hc$ATN_group)
-table(all_data_hc$ATN_group) #AD n=419, SNAP n=123, CN n=247
 
 #--------------------Create hippocampal subfields ROIs------------------------#
 #Rename ROIs to CA1, Presubiculum, Subiculum, Dentate Gyrus (CA4)
@@ -172,10 +158,11 @@ all_data_hc$Presubiculum_sum <- (all_data_hc$Presubiculum_Left + all_data_hc$Pre
 all_data_hc$Subiculum_sum <- (all_data_hc$Subiculum_Left + all_data_hc$Subiculum_Right) / 2
 all_data_hc$DG_sum <- (all_data_hc$DG_Left + all_data_hc$DG_Right) / 2
 
+
 #------------------------ Additional data cleaning ------------------------------------#
 #Subset dataframe to select needed columns
 all_data_hc <- all_data_hc %>% dplyr::select(RID, VISCODE2, DX_bl, AGE, PTGENDER, PTEDUCAT, MMSE, APOE4, Hippocampus_bl, ICV_bl,
-                                             GAP_43, ABETA, PTAU, TAU, ADNI_MEM, ADNI_EF, CA1_sum, DG_sum, Subiculum_sum, Presubiculum_sum, ATN_group)
+                                             GAP_43, ABETA, PTAU, TAU, ADNI_MEM, ADNI_EF, CA1_sum, DG_sum, Subiculum_sum, Presubiculum_sum, ATN_group, ATN_class, metaROI, LHIPQC, RHIPQC, OVERALLQC, PET_atn)
 
 #Remove dupliates
 all_data_hc[all_data_hc$RID %in% all_data_hc$RID[duplicated(all_data_hc$RID)],]
@@ -185,10 +172,8 @@ dups <- data.frame(dups)
 all_data_hc <- all_data_hc[!(all_data_hc$RID %in% dups$dups),] #remove duplicates
 length(all_data_hc$RID)
 
-#Binarize APOE4 carrier status
+#Binarize data
 all_data_hc$APOE4[all_data_hc$APOE4=="2"] <- 1
-
-#Binarize PTGENDER
 all_data_hc$PTGENDER <- ifelse(all_data_hc$PTGENDER=="Female", 1, 0) #Female=1
 all_data_hc$PTGENDER <- as.factor(all_data_hc$PTGENDER)
 
@@ -199,34 +184,22 @@ cbind(lapply(lapply(all_data_hc, is.na), sum)) #64 missing hippocampal volume
 all_data_hc <- all_data_hc[!is.na(all_data_hc$Hippocampus_bl), ]
 length(all_data_hc$RID)
 
-#***** N = 689  ******
+#Making a dataset without HC QC/failed
+all_data_qc <- all_data_hc
+all_data_qc <- all_data_qc %>% filter(OVERALLQC != "Fail")
+all_data_qc <- all_data_qc %>% filter(LHIPQC != "Fail" & RHIPQC != "Fail") 
+all_data_qc <- all_data_qc %>% filter(LHIPQC != "" & RHIPQC != "")
+
+#***** N = 593  ******
+
 
 #-------------- ICV correction for total/subfield hippocampal data -------------#
-#Total HC stats
-mean(all_data_hc$Hippocampus_bl)
-sd(all_data_hc$Hippocampus_bl)
+all_data_qc$HC_ICV <- all_data_qc$Hippocampus_bl / all_data_qc$ICV_bl
+all_data_qc$CA1_sum_ICV <- all_data_qc$CA1_sum / all_data_qc$ICV_bl
+all_data_qc$Presubiculum_sum_ICV <- all_data_qc$Presubiculum_sum / all_data_qc$ICV_bl
+all_data_qc$Subiculum_sum_ICV <- all_data_qc$Subiculum_sum / all_data_qc$ICV_bl
+all_data_qc$DG_sum_ICV <- all_data_qc$DG_sum / all_data_qc$ICV_bl
 
-#ROI stats
-mean(all_data_hc$CA1_sum)
-mean(all_data_hc$Presubiculum_sum)
-mean(all_data_hc$Subiculum_sum)
-mean(all_data_hc$DG_sum)
-
-#ICV correction for total HC data
-all_data_hc$HC_ICV <- all_data_hc$Hippocampus_bl / all_data_hc$ICV_bl
-
-#ICV correction for subfields
-all_data_hc$CA1_sum_ICV <- all_data_hc$CA1_sum / all_data_hc$ICV_bl
-all_data_hc$Presubiculum_sum_ICV <- all_data_hc$Presubiculum_sum / all_data_hc$ICV_bl
-all_data_hc$Subiculum_sum_ICV <- all_data_hc$Subiculum_sum / all_data_hc$ICV_bl
-all_data_hc$DG_sum_ICV <- all_data_hc$DG_sum / all_data_hc$ICV_bl
-
-#Multiplying the ROIs if needed
-# all_data_hc$Subiculum_sum_ICV_mul <- all_data_hc$Subiculum_sum_ICV * 100
-# all_data_hc$Presubiculum_sum_ICV_mul <- all_data_hc$Presubiculum_sum_ICV * 100
-# all_data_hc$CA1_sum_ICV_mul <- all_data_hc$CA1_sum_ICV * 100
-# all_data_hc$HC_ICV_mul <- all_data_hc$HC_ICV * 100
-# all_data_hc$DG_ICV_mul <- all_data_hc$DG_sum_ICV * 100
 
 #---------------------------- Outlier Removal ---------------------------------#
 scattOut <- function(VOI) {
@@ -242,103 +215,87 @@ scattOut <- function(VOI) {
 }
 
 #Log transform GAP-43
-all_data_hc$GAP43_log <- log(all_data_hc$GAP_43) #insert log GAP43 into all_data_hc_long
+all_data_qc$GAP43_log <- log(all_data_qc$GAP_43) #insert log GAP43 into all_data_hc_long
 
-scattOut(all_data_hc$GAP43_log)
-scattOut(all_data_hc$ADNI_MEM)
-scattOut(all_data_hc$HC_ICV) #1
-scattOut(all_data_hc$CA1_sum_ICV) #5
-scattOut(all_data_hc$DG_sum_ICV) #1
-scattOut(all_data_hc$Subiculum_sum_ICV)
-scattOut(all_data_hc$Presubiculum_sum_ICV) #2
+scattOut(all_data_qc$GAP43_log)
+scattOut(all_data_qc$ADNI_MEM)
+scattOut(all_data_qc$HC_ICV) #1
+scattOut(all_data_qc$CA1_sum_ICV) #5
+scattOut(all_data_qc$DG_sum_ICV) #1
+scattOut(all_data_qc$Subiculum_sum_ICV)
+scattOut(all_data_qc$Presubiculum_sum_ICV) #2
 
 #Total HC volume
-uppermax_hip <- mean(all_data_hc$HC_ICV) + 3*sd(all_data_hc$HC_ICV)
-lowermax_hip <- mean(all_data_hc$HC_ICV) - 3*sd(all_data_hc$HC_ICV)
-all_data_hc[which(all_data_hc$HC_ICV > uppermax_hip | all_data_hc$HC_ICV < lowermax_hip),] 
-hc_outliers <- c(4784, 5241)
+uppermax_hip <- mean(all_data_qc$HC_ICV) + 3*sd(all_data_qc$HC_ICV)
+lowermax_hip <- mean(all_data_qc$HC_ICV) - 3*sd(all_data_qc$HC_ICV)
+all_data_qc[which(all_data_qc$HC_ICV > uppermax_hip | all_data_qc$HC_ICV < lowermax_hip),] 
+hc_outliers <- c(4784)
 
 #CA1 volume
-uppermax_ca1 <- mean(all_data_hc$CA1_sum_ICV) + 3*sd(all_data_hc$CA1_sum_ICV)
-lowermax_ca1 <- mean(all_data_hc$CA1_sum_ICV) - 3*sd(all_data_hc$CA1_sum_ICV)
-all_data_hc[which(all_data_hc$CA1_sum_ICV > uppermax_ca1 | all_data_hc$CA1_sum_ICV < lowermax_ca1),] 
-ca1_outliers <- c(4071, 4226, 4755, 4784, 5197)
+uppermax_ca1 <- mean(all_data_qc$CA1_sum_ICV) + 3*sd(all_data_qc$CA1_sum_ICV)
+lowermax_ca1 <- mean(all_data_qc$CA1_sum_ICV) - 3*sd(all_data_qc$CA1_sum_ICV)
+all_data_qc[which(all_data_qc$CA1_sum_ICV > uppermax_ca1 | all_data_qc$CA1_sum_ICV < lowermax_ca1),] 
+ca1_outliers <- c(4071, 4226, 4755, 4784)
 
 #DG volume
-uppermax_dg <- mean(all_data_hc$DG_sum_ICV) + 3*sd(all_data_hc$DG_sum_ICV)
-lowermax_dg <- mean(all_data_hc$DG_sum_ICV) - 3*sd(all_data_hc$DG_sum_ICV)
-all_data_hc[which(all_data_hc$DG_sum_ICV > uppermax_dg | all_data_hc$DG_sum_ICV < lowermax_dg),] 
+uppermax_dg <- mean(all_data_qc$DG_sum_ICV) + 3*sd(all_data_qc$DG_sum_ICV)
+lowermax_dg <- mean(all_data_qc$DG_sum_ICV) - 3*sd(all_data_qc$DG_sum_ICV)
+all_data_qc[which(all_data_qc$DG_sum_ICV > uppermax_dg | all_data_qc$DG_sum_ICV < lowermax_dg),] 
 dg_outliers <- c(2278)
 
 #Presubiculum
-uppermax_pres <- mean(all_data_hc$Presubiculum_sum_ICV) + 3*sd(all_data_hc$Presubiculum_sum_ICV)
-lowermax_pres <- mean(all_data_hc$Presubiculum_sum_ICV) - 3*sd(all_data_hc$Presubiculum_sum_ICV)
-all_data_hc[which(all_data_hc$Presubiculum_sum_ICV > uppermax_pres | all_data_hc$Presubiculum_sum_ICV < lowermax_pres),] 
+uppermax_pres <- mean(all_data_qc$Presubiculum_sum_ICV) + 3*sd(all_data_qc$Presubiculum_sum_ICV)
+lowermax_pres <- mean(all_data_qc$Presubiculum_sum_ICV) - 3*sd(all_data_qc$Presubiculum_sum_ICV)
+all_data_qc[which(all_data_qc$Presubiculum_sum_ICV > uppermax_pres | all_data_qc$Presubiculum_sum_ICV < lowermax_pres),] 
 presub_outliers <- c(2234, 2245)
 
 outliers <- as.numeric(c(hc_outliers, ca1_outliers, dg_outliers, presub_outliers))
 outliers <- data.frame(outliers)
 outliers <- outliers %>% distinct(outliers, .keep_all = TRUE)
-length(outliers$outliers) #9 total outliers
+length(outliers$outliers)
 
-all_data_hc <- all_data_hc[!(all_data_hc$RID %in% outliers$outliers),] #remove outliers
-length(all_data_hc$RID)
+all_data_qc <- all_data_qc[!(all_data_qc$RID %in% outliers$outliers),] #remove outliers
+length(all_data_qc$RID)
 
-#***** N = 680  ******
-
-all_data_hc[all_data_hc$RID %in% all_data_hc$RID[duplicated(all_data_hc$RID)],]
 
 #--------------------- Checking data distributions ----------------------------#
 #checking continuous variables
-qqnorm(all_data_hc$AGE)
-qqnorm(all_data_hc$PTEDUCAT)
-  hist(all_data_hc$PTEDUCAT) #some skew towards higher education
-qqnorm(all_data_hc$ADNI_MEM)
+qqnorm(all_data_qc$AGE)
+qqnorm(all_data_qc$PTEDUCAT)
+hist(all_data_qc$PTEDUCAT) 
+qqnorm(all_data_qc$ADNI_MEM)
 
 #checking ROIs
-qqnorm(all_data_hc$HC_ICV)
-qqnorm(all_data_hc$CA1_sum_ICV)
-qqnorm(all_data_hc$DG_sum_ICV)
-qqnorm(all_data_hc$Presubiculum_sum_ICV)
-qqnorm(all_data_hc$Subiculum_sum_ICV)
+qqnorm(all_data_qc$HC_ICV)
+qqnorm(all_data_qc$CA1_sum_ICV)
+qqnorm(all_data_qc$DG_sum_ICV)
+qqnorm(all_data_qc$Presubiculum_sum_ICV)
+qqnorm(all_data_qc$Subiculum_sum_ICV)
 
 #checking biomarker
-qqnorm(all_data_hc$GAP_43)
-    shapiro.test(all_data_hc$GAP_43)
+qqnorm(all_data_qc$GAP_43)
+shapiro.test(all_data_qc$GAP_43)
 
 
 #--------------------------- Norm all data ------------------------------------#
 #Z-score all demographic, biomarker data
-all_data_hc$PTEDUCAT_norm <- scale(all_data_hc$PTEDUCAT)
-all_data_hc$AGE_norm <- scale(all_data_hc$AGE)
-all_data_hc$GAP43_log_norm <- scale(all_data_hc$GAP43_log)
-all_data_hc$ABETA_norm <- scale(all_data_hc$ABETA)
-all_data_hc$PTAU_norm <- scale(all_data_hc$PTAU)
-
-length(unique(all_data_hc$RID)) #N=680, correct
+all_data_qc$PTEDUCAT_norm <- scale(all_data_qc$PTEDUCAT)
+all_data_qc$AGE_norm <- scale(all_data_qc$AGE)
+all_data_qc$GAP43_log_norm <- scale(all_data_qc$GAP43_log)
+all_data_qc$ABETA_norm <- scale(all_data_qc$ABETA)
+all_data_qc$PTAU_norm <- scale(all_data_qc$PTAU)
 
 #Z-score all HC volume data
-all_data_hc$HC_ICV_norm <- scale(all_data_hc$HC_ICV)
-all_data_hc$CA1_sum_ICV <- scale(all_data_hc$CA1_sum_ICV)
-all_data_hc$Presubiculum_sum_ICV <- scale(all_data_hc$Presubiculum_sum_ICV)
-all_data_hc$Subiculum_sum_ICV <- scale(all_data_hc$Subiculum_sum_ICV)
-all_data_hc$DG_sum_ICV <- scale(all_data_hc$DG_sum_ICV)
-
-#Z-score multiplied HC volumes
-# all_data_hc$HC_ICV_norm_mul <- scale(all_data_hc$HC_ICV_mul)
-# all_data_hc$Subiculum_sum_ICV_mul <- scale(all_data_hc$Subiculum_sum_ICV_mul)
-# all_data_hc$Presubiculum_sum_ICV_mul <- scale(all_data_hc$Presubiculum_sum_ICV_mul)
-# all_data_hc$CA1_sum_ICV_mul <- scale(all_data_hc$CA1_sum_ICV_mul)
-# all_data_hc$DG_ICV_norm_mul <- scale(all_data_hc$DG_ICV_mul)
+all_data_qc$HC_ICV_norm <- scale(all_data_qc$HC_ICV)
+all_data_qc$CA1_sum_ICV <- scale(all_data_qc$CA1_sum_ICV)
+all_data_qc$Presubiculum_sum_ICV <- scale(all_data_qc$Presubiculum_sum_ICV)
+all_data_qc$Subiculum_sum_ICV <- scale(all_data_qc$Subiculum_sum_ICV)
+all_data_qc$DG_sum_ICV <- scale(all_data_qc$DG_sum_ICV)
 
 
 #----------------------------------------------------------------------------#
 #------------------- Table 1. Participant Demographics ----------------------#
 #----------------------------------------------------------------------------#
-#demographics at baseline
-#https://cran.r-project.org/web/packages/table1/vignettes/table1-examples.html 
-
-#CREATING TABLE
 library(table1)
 
 rndr <- function(x, name, ...) {
@@ -377,7 +334,7 @@ labels <- list(
                  Presubiculum_sum_ICV = "Presubiculum volume"))
 
 
-strata <- all_data_hc 
+strata <- all_data_qc 
 strata$ATN_group <- factor(strata$ATN_group, levels = c("CN", "SNAP", "AD"))
 strata$APOE4 <- factor(strata$APOE4)
 
@@ -387,292 +344,265 @@ my.render.cat <- function(x) {
   c("", sapply(stats.default(x), function(y) with(y,sprintf("%d (%0.0f %%)", FREQ, PCT)))) }
 
 # CA1_sum, Presubiculum_sum, Subiculum_sum, DG_sum, Hippocampus_bl
-table1(~ AGE + PTGENDER + PTEDUCAT + APOE4 + MMSE + ADNI_MEM + ABETA + PTAU + GAP_43 + Hippocampus_bl + Subiculum_sum + Presubiculum_sum + DG_sum + CA1_sum | ATN_group,
-  data = strata, render.continuous=my.render.cont, render.categorical=my.render.cat, topclass= "Rtable1-times")
+tab1 <- table1(~ AGE + PTGENDER + PTEDUCAT + APOE4 + MMSE + ADNI_MEM + ABETA + PTAU + GAP_43 + Hippocampus_bl + Subiculum_sum + Presubiculum_sum + DG_sum + CA1_sum | ATN_group,
+       data = strata, render.continuous=my.render.cont, render.categorical=my.render.cat, topclass= "Rtable1-times")
+tab1
 
-all_data_hc2 <- all_data_hc %>% filter(DX_bl=="CN" | DX_bl=="SMC" | DX_bl=="MCI")
-
-#------------------------------------------------------------------------------#
-#-------------------------PRELIMINARY ANALYSES---------------------------------#
-#------------------------------------------------------------------------------#
-#Executive Function
-#summary(lm(all_data_hc$ADNI_EF ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*HC_ICV_norm, data=all_data_hc))
-#Supplemental: GAP-43 does not predicting EF and there is no significant GAPxHC interaction on EF,
-#suggesting that this relationship is specific to episodic memory performance
-
-library(interactions)
-
-#make sure CN (no pathology group) is the reference group
-all_data_hc <- within(all_data_hc, ATN_group <- relevel(factor(ATN_group), ref="CN"))
-contrasts(all_data_hc$ATN_group) 
 
 #------------------------------------------------------------------------------#
 #--------------------------- Analysis Aim 1------------------------------------#
 #------------------------------------------------------------------------------#
-#Aim 1. Main effect of GAP-43 on episodic memory performance
+all_data_qc <- within(all_data_qc, ATN_group <- relevel(factor(ATN_group), ref="CN"))
+contrasts(all_data_qc$ATN_group) 
 
-#Step 1. Covariates predicting memory
-step1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_hc)
+#Step 1. Covariates
+step1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_qc)
 summary(step1)
 
-#Step 2. Main effect of GAP-43 predicting memory
-step2 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_hc)
-summary(step2) #significant main effect of gap43 -0.10333    0.02959  -3.493  0.00051 ***
-anova(step1,step2) #sig
-summary(step2)$r.squared - summary(step1)$r.squared #change in Rsq= 0.01209138
+#Step 2. Main effect of GAP-43
+step2 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_qc)
+summary(step2)
+anova(step1,step2)
+summary(step2)$r.squared - summary(step1)$r.squared
 
 
 #------------------------------------------------------------------------------#
 #-------------------------- Analysis Aim 2  -----------------------------------#
 #------------------------------------------------------------------------------#
 
-#Aim 2. HC volume as a moderator on the relationship between GAP-43 and episodic memory performance
+#Aim 2. HC volume as a moderator
 
-#------------------------------------------------------------------------------#
 #1. Total Hippocampal Volume
 #Step 1. Covariates predicting memory [identical as aim 1]
-step1_hc <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_hc)
+step1_hc <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_qc)
 summary(step1_hc)
 
-#Step 2. Main effect of GAP-43 predicting memory [identical as aim 1]
-step2_hc <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_hc)
+#Step 2. Main effect of GAP-43 [identical as aim 1]
+step2_hc <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_qc)
 summary(step2_hc)
-anova(step1_hc, step2_hc)
-summary(step2_hc)$r.squared - summary(step1_hc)$r.squared #change in Rsq= 0.01209138
+anova(step1_hc, step2_hc) 
+summary(step2_hc)$r.squared - summary(step1_hc)$r.squared
 
 #Step 3. Main effect of HC
-step3_hc <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + HC_ICV_norm, data=all_data_hc)
-summary(step3_hc) #significant, p<.001
+step3_hc <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + HC_ICV_norm, data=all_data_qc)
+summary(step3_hc)
 anova(step2_hc, step3_hc)
-summary(step3_hc)$r.squared - summary(step2_hc)$r.squared #change in Rsq= 0.1281263
+summary(step3_hc)$r.squared - summary(step2_hc)$r.squared
 
 #Step 4. Interaction GAP x HC_ICV on memory
-step4_hc <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + HC_ICV_norm*GAP43_log_norm, data=all_data_hc)
-summary(step4_hc) #significant interaction
+step4_hc <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*HC_ICV_norm, data=all_data_qc)
+summary(step4_hc)
 anova(step4_hc, step3_hc)
-summary(step4_hc)$r.squared - summary(step3_hc)$r.squared #change in Rsq= 0.004223594
+summary(step4_hc)$r.squared - summary(step3_hc)$r.squared
 
-#Interaction Plot and Post-Hoc
-intx_hc <- lm(all_data_hc$ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + HC_ICV_norm*GAP43_log_norm, data=all_data_hc)
-intx_hc_plot <- interact_plot(model=intx_hc, pred=GAP43_log_norm, modx=HC_ICV_norm, plot.points=TRUE, data=all_data_hc)
-intx_hc_plot
+#Interaction Post-Hoc
+  #Plot
+  intx_hc <- lm(all_data_qc$ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + HC_ICV_norm*GAP43_log_norm, data=all_data_qc)
+  intx_hc_plot <- interact_plot(model=intx_hc, pred=GAP43_log_norm, modx=HC_ICV_norm, plot.points=TRUE, data=all_data_qc)
+  intx_hc_plot
 
-sim_slopes(intx_hc, pred=GAP43_log_norm, modx=HC_ICV_norm) #sig slope at -1SD and mean
-#Greater GAP-43 is associated with worse episodic memory specifically in those with low HC volume and mean HC volume
-#Contrastingly, those with higher HC volume do not exhibit this negative relationship between GAP-43 and memory
+  sim_slopes(intx_hc, pred=GAP43_log_norm, modx=HC_ICV_norm)
 
-#Emmeans for post-hoc
-effa <- mean(all_data_hc$HC_ICV_norm) + sd(all_data_hc$HC_ICV_norm)
-eff <- mean(all_data_hc$HC_ICV_norm)
-effb <- mean(all_data_hc$HC_ICV_norm) - sd(all_data_hc$HC_ICV_norm)
+  #Emmeans for post-hoc
+  effa <- mean(all_data_qc$HC_ICV_norm) + sd(all_data_qc$HC_ICV_norm)
+  eff <- mean(all_data_qc$HC_ICV_norm)
+  effb <- mean(all_data_qc$HC_ICV_norm) - sd(all_data_qc$HC_ICV_norm)
+  effar <- round(effa,1) #1
+  effr <- round(eff,1) #0 
+  effbr <- round(effb,1) #-1
+  mylist <- list(HC_ICV_norm=c(effbr,effr,effar))
 
-effar <- round(effa,1) #1
-effr <- round(eff,1) #0 
-effbr <- round(effb,1) #-1
+  #Test significance of the slope
+  emtrends(intx_hc , ~HC_ICV_norm, var="GAP43_log_norm", at=mylist) #shows CI for each group
 
-mylist <- list(HC_ICV_norm=c(effbr,effr,effar))
-
-#Test significance of the slope
-emtrends(intx_hc , ~HC_ICV_norm, var="GAP43_log_norm", at=mylist) #shows CI for each group (significant for -1SD and mean)
-
-#Test pairwise differences of slopes
-emtrends(intx_hc, pairwise ~HC_ICV_norm, var="GAP43_log_norm", at=mylist, adjust="none")
-#p value matches that shown in step3 of HLR
-#Yes, all slopes are significantly different from each other
+  #Test pairwise differences of slopes - note: p value matches that shown in step3 of HLR
+  emtrends(intx_hc, pairwise ~HC_ICV_norm, var="GAP43_log_norm", at=mylist, adjust="none")
 
 
 #------------------------------------------------------------------------------#
 #2. CA1 subfield
-#Step 1. Covariates predicting memory
-step1_ca1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_hc)
+#Step 1. Covariates
+step1_ca1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_qc)
 summary(step1_ca1)
 
-#Step 2. Main effect of GAP-43 predicting memory
-step2_ca1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_hc)
+#Step 2. Main effect of GAP-43
+step2_ca1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_qc)
 summary(step2_ca1)
 anova(step1_ca1, step2_ca1)
 
 #Step 3. Main effect of HC
-step3_ca1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + CA1_sum_ICV, data=all_data_hc)
-summary(step3_ca1) #significant
-anova(step2_ca1, step3_ca1) #significant
-summary(step3_ca1)$r.squared - summary(step2_ca1)$r.squared #change in Rsq= 0.02324049
+step3_ca1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + CA1_sum_ICV, data=all_data_qc)
+summary(step3_ca1)
+anova(step2_ca1, step3_ca1)
+summary(step3_ca1)$r.squared - summary(step2_ca1)$r.squared
 
 #Step 4. Interaction GAP x HC_ICV ROI on memory
-step4_ca1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*CA1_sum_ICV, data=all_data_hc)
-summary(step4_ca1)  #ns interaction
+step4_ca1 <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*CA1_sum_ICV, data=all_data_qc)
+summary(step4_ca1)
 anova(step3_ca1,step4_ca1)
-summary(step4_ca1)$r.squared - summary(step3_ca1)$r.squared #change in Rsq= 0.0214
-
+summary(step4_ca1)$r.squared - summary(step3_ca1)$r.squared
 
 #No post-hoc since interaction is not significant
-
+    
 
 
 #------------------------------------------------------------------------------#
 #3. DG subfield
-#Step 1. Covariates predicting memory
-step1_dg <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_hc)
+#Step 1. Covariates
+step1_dg <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_qc)
 summary(step1_dg)
 
-#Step 2. Main effect of GAP-43 predicting memory
-step2_dg <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_hc)
+#Step 2. Main effect of GAP-43
+step2_dg <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_qc)
 summary(step2_dg)
 anova(step1_dg, step2_dg)
 
 #Step 3. Main effect of HC
-step3_dg <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + DG_sum_ICV, data=all_data_hc)
-summary(step3_dg) #significant
-anova(step2_dg, step3_dg) #significant
-summary(step3_dg)$r.squared - summary(step2_dg)$r.squared #change in Rsq= 0.08201847
+step3_dg <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + DG_sum_ICV, data=all_data_qc)
+summary(step3_dg)
+anova(step2_dg, step3_dg)
+summary(step3_dg)$r.squared - summary(step2_dg)$r.squared
 
-#Step 4. Interaction GAP x HC_ICV ROI on memory
-step4_dg <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*DG_sum_ICV, data=all_data_hc)
-summary(step4_dg) 
-anova(step3_dg, step4_dg) #significant interaction
-summary(step4_dg)$r.squared - summary(step3_dg)$r.squared #change in Rsq= 0.00461105
+#Step 4. Interaction GAP x HC_ICV ROI
+step4_dg <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*DG_sum_ICV, data=all_data_qc)
+summary(step4_dg)
+anova(step3_dg, step4_dg)
+summary(step4_dg)$r.squared - summary(step3_dg)$r.squared
 
-#Interaction Plot and Post-Hoc
-intx_dg <- lm(all_data_hc$ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + DG_sum_ICV*GAP43_log_norm, data=all_data_hc)
-intx_dg_plot <- interact_plot(model=intx_dg, pred=GAP43_log_norm, modx=DG_sum_ICV, plot.points=TRUE, data=all_data_hc)
-intx_dg_plot
+#Post-Hoc
+  #Plotting
+  intx_dg <- lm(all_data_qc$ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + DG_sum_ICV*GAP43_log_norm, data=all_data_qc)
+  intx_dg_plot <- interact_plot(model=intx_dg, pred=GAP43_log_norm, modx=DG_sum_ICV, plot.points=TRUE, data=all_data_qc)
+  intx_dg_plot
+  sim_slopes(intx_dg, pred=GAP43_log_norm, modx=DG_sum_ICV)
 
-sim_slopes(intx_dg, pred=GAP43_log_norm, modx=DG_sum_ICV) #significant slope for all groups
-
-#Emmeans for post-hoc
-effa <- mean(all_data_hc$DG_sum_ICV) + sd(all_data_hc$DG_sum_ICV)
-eff <- mean(all_data_hc$DG_sum_ICV)
-effb <- mean(all_data_hc$DG_sum_ICV) - sd(all_data_hc$DG_sum_ICV)
-
-effar <- round(effa,1) #1
-effr <- round(eff,1) #0 
-effbr <- round(effb,1) #-1
-
-mylist <- list(DG_sum_ICV=c(effbr,effr,effar))
-
-#Test significancc of the slope
-emtrends(intx_dg, ~DG_sum_ICV, var="GAP43_log_norm", at=mylist) #shows CI for each group (significant for all groups)
-
-#Test pairwise differences of slopes
-emtrends(intx_dg, pairwise ~DG_sum_ICV, var="GAP43_log_norm", at=mylist, adjust="none")
-#Yes, all slopes are significantly different from each other
-
-
+  #Emmeans for post-hoc
+  effa <- mean(all_data_qc$DG_sum_ICV) + sd(all_data_qc$DG_sum_ICV)
+  eff <- mean(all_data_qc$DG_sum_ICV)
+  effb <- mean(all_data_qc$DG_sum_ICV) - sd(all_data_qc$DG_sum_ICV)
+  effar <- round(effa,1) #1
+  effr <- round(eff,1) #0 
+  effbr <- round(effb,1) #-1
+  mylist <- list(DG_sum_ICV=c(effbr,effr,effar))
+  
+  #Test significance of the slope
+  emtrends(intx_dg, ~DG_sum_ICV, var="GAP43_log_norm", at=mylist)
+  
+  #Test pairwise differences of slopes
+  emtrends(intx_dg, pairwise ~DG_sum_ICV, var="GAP43_log_norm", at=mylist, adjust="none")
 
 #------------------------------------------------------------------------------#
 #4. Subiculum subfield
-#Step 1. Covariates predicting memory
-step1_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_hc)
+#Step 1. Covariates
+step1_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_qc)
 summary(step1_sub)
 
-#Step 2. Main effect of GAP-43 predicting memory
-step2_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_hc)
+#Step 2. Main effect of GAP-43
+step2_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_qc)
 summary(step2_sub)
 anova(step1,step2_sub)
 
 #Step 3. Main effect of HC
-step3_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + Subiculum_sum_ICV, data=all_data_hc)
-summary(step3_sub) #significant
-anova(step2_sub, step3_sub) #significant
-summary(step3_sub)$r.squared - summary(step2_sub)$r.squared #change in Rsq= 0.1139697
+step3_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + Subiculum_sum_ICV, data=all_data_qc)
+summary(step3_sub)
+anova(step2_sub, step3_sub)
+summary(step3_sub)$r.squared - summary(step2_sub)$r.squared
 
 #Step 4. Interaction GAP x HC_ICV ROI on memory
-step4_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Subiculum_sum_ICV, data=all_data_hc)
-summary(step4_sub) 
+step4_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Subiculum_sum_ICV, data=all_data_qc)
+summary(step4_sub)
 anova(step3_sub, step4_sub)
-summary(step4_sub)$r.squared - summary(step3_sub)$r.squared #change in Rsq= 0.004325508
+summary(step4_sub)$r.squared - summary(step3_sub)$r.squared
 
-#Interaction plot and post-hoc
-intx_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Subiculum_sum_ICV, data=all_data_hc)
-posthoc_sub <- interact_plot(model=intx_sub, pred=GAP43_log_norm, modx=Subiculum_sum_ICV, plot.points=TRUE, data=all_data_hc)
-posthoc_sub
-sim_slopes(intx_sub, pred=GAP43_log_norm, modx=Subiculum_sum_ICV)
-
-#Emmeans for post-hoc
-effa <- mean(all_data_hc$Subiculum_sum_ICV) + sd(all_data_hc$Subiculum_sum_ICV)
-eff <- mean(all_data_hc$Subiculum_sum_ICV)
-effb <- mean(all_data_hc$Subiculum_sum_ICV) - sd(all_data_hc$Subiculum_sum_ICV)
-
-effar <- round(effa,1) #1
-effr <- round(eff,1) #0 
-effbr <- round(effb,1) #-1
-
-mylist <- list(Subiculum_sum_ICV=c(effbr,effr,effar))
-
-#Test significance of the slope
-emtrends(intx_sub, ~Subiculum_sum_ICV, var="GAP43_log_norm", at=mylist) #shows CI for each group (significant for all groups)
-
-#Test pairwise differences of slopes
-emtrends(intx_sub, pairwise ~Subiculum_sum_ICV, var="GAP43_log_norm", at=mylist, adjust="none")
-#Yes, all slopes are significantly different from each other
-
-
+  #Plotting
+  intx_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Subiculum_sum_ICV, data=all_data_qc)
+  posthoc_sub <- interact_plot(model=intx_sub, pred=GAP43_log_norm, modx=Subiculum_sum_ICV, plot.points=TRUE, data=all_data_qc)
+  posthoc_sub
+  sim_slopes(intx_sub, pred=GAP43_log_norm, modx=Subiculum_sum_ICV)
+  
+  #Emmeans for post-hoc
+  effa <- mean(all_data_qc$Subiculum_sum_ICV) + sd(all_data_qc$Subiculum_sum_ICV)
+  eff <- mean(all_data_qc$Subiculum_sum_ICV)
+  effb <- mean(all_data_qc$Subiculum_sum_ICV) - sd(all_data_qc$Subiculum_sum_ICV)
+  effar <- round(effa,1) #1
+  effr <- round(eff,1) #0 
+  effbr <- round(effb,1) #-1
+  
+  mylist <- list(Subiculum_sum_ICV=c(effbr,effr,effar))
+  
+  emtrends(intx_sub, ~Subiculum_sum_ICV, var="GAP43_log_norm", at=mylist)
+  emtrends(intx_sub, pairwise ~Subiculum_sum_ICV, var="GAP43_log_norm", at=mylist, adjust="none")
 
 #------------------------------------------------------------------------------#
 #5. Presubiculum subfield
-#Step 1. Covariates predicting memory
-step1_presub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_hc)
+#Step 1. Covariates
+step1_presub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data=all_data_qc)
 summary(step1_presub)
 
-#Step 2. Main effect of GAP-43 predicting memory
-step2_presub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_hc)
+#Step 2. Main effect of GAP-43
+step2_presub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm, data=all_data_qc)
 summary(step2_presub)
 anova(step1_presub, step2_presub)
 
 #Step 3. Main effect of HC
-step3_presub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + Presubiculum_sum_ICV, data=all_data_hc)
-summary(step3_presub) #significant
-anova(step2_presub, step3_presub) #significant
-summary(step3_presub)$r.squared - summary(step2_presub)$r.squared #change in Rsq= 0.1395107
+step3_presub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm + Presubiculum_sum_ICV, data=all_data_qc)
+summary(step3_presub)
+anova(step2_presub, step3_presub)
+summary(step3_presub)$r.squared - summary(step2_presub)$r.squared
 
 #Step 4. Interaction GAP x HC_ICV ROI on memory
-step4_presub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Presubiculum_sum_ICV, data=all_data_hc)
-summary(step4_presub) 
+step4_presub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Presubiculum_sum_ICV, data=all_data_qc)
+summary(step4_presub)
 anova(step3_presub, step4_presub)
-summary(step4_presub)$r.squared - summary(step3_presub)$r.squared #change in Rsq= 0.005541383
+summary(step4_presub)$r.squared - summary(step3_presub)$r.squared
 
-#post hoc for presubiculum interaction
-presub_intx <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Presubiculum_sum_ICV, data=all_data_hc)
-posthoc_presub <- interact_plot(model=presub_intx, pred=GAP43_log_norm, modx=Presubiculum_sum_ICV, plot.points=TRUE, data=all_data_hc)
-posthoc_presub
-sim_slopes(presub_intx, pred=GAP43_log_norm, modx=Presubiculum_sum_ICV) 
+#Post-hoc
+#Plotting
+  presub_intx <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Presubiculum_sum_ICV, data=all_data_qc)
+  posthoc_presub <- interact_plot(model=presub_intx, pred=GAP43_log_norm, modx=Presubiculum_sum_ICV, plot.points=TRUE, data=all_data_qc)
+  posthoc_presub
+  sim_slopes(presub_intx, pred=GAP43_log_norm, modx=Presubiculum_sum_ICV) 
+  
+  #Emmeans for post-hoc
+  effa <- mean(all_data_qc$Presubiculum_sum_ICV) + sd(all_data_qc$Presubiculum_sum_ICV)
+  eff <- mean(all_data_qc$Presubiculum_sum_ICV)
+  effb <- mean(all_data_qc$Presubiculum_sum_ICV) - sd(all_data_qc$Presubiculum_sum_ICV)
+  effar <- round(effa,1) #1
+  effr <- round(eff,1) #0 
+  effbr <- round(effb,1) #-1
+  mylist <- list(Presubiculum_sum_ICV=c(effbr,effr,effar))
+  
+  #Test significance of the slope
+  emtrends(presub_intx, ~Presubiculum_sum_ICV, var="GAP43_log_norm", at=mylist) #shows CI for each group (significant for all groups)
+  
+  #Test pairwise differences of slopes
+  emtrends(presub_intx, pairwise ~Presubiculum_sum_ICV, var="GAP43_log_norm", at=mylist, adjust="none")
 
-#Emmeans for post-hoc
-effa <- mean(all_data_hc$Presubiculum_sum_ICV) + sd(all_data_hc$Presubiculum_sum_ICV)
-eff <- mean(all_data_hc$Presubiculum_sum_ICV)
-effb <- mean(all_data_hc$Presubiculum_sum_ICV) - sd(all_data_hc$Presubiculum_sum_ICV)
-
-effar <- round(effa,1) #1
-effr <- round(eff,1) #0 
-effbr <- round(effb,1) #-1
-
-mylist <- list(Presubiculum_sum_ICV=c(effbr,effr,effar))
-
-#Test significance of the slope
-emtrends(presub_intx, ~Presubiculum_sum_ICV, var="GAP43_log_norm", at=mylist) #shows CI for each group (significant for all groups)
-
-#Test pairwise differences of slopes
-emtrends(presub_intx, pairwise ~Presubiculum_sum_ICV, var="GAP43_log_norm", at=mylist, adjust="none")
-#Yes, all slopes are significantly different from each other
-
+  
 #------------------------------------------------------------------------------#
 #------------------ Figures: Significant Effects ------------------------------#
 #------------------------------------------------------------------------------#
 
 library(ggpubr)
 library(jtools) #theme_apa()
+library(ggtext) #superscript text
 
 # FIGURE 1: MAIN EFFECTS
 ## Main effect of GAP43 (panel A)
 
 # create residuals
-resid_memory <- residuals(lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_hc))
-resid_gap43 <- residuals(lm(GAP43_log_norm ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_hc))
+resid_memory <- residuals(lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_qc))
+resid_gap43 <- residuals(lm(GAP43_log_norm ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_qc))
+partial_df <- data.frame(resid_memory, resid_gap43)
 
 # create panel A
-a <- ggplot(data = all_data_hc, aes(x = resid_gap43, y = resid_memory)) +
+a <- ggplot(data = partial_df, aes(x = resid_gap43, y = resid_memory)) +
   geom_point(color = "skyblue", alpha=.3) +
   geom_smooth(method = "lm", se = TRUE, color = "#1A73B5") +
+  stat_regline_equation(label.x = min(resid_gap43), # where equation appears
+                        label.y = max(resid_memory) - 0.5, # where equation appears
+                        aes(label = ..eq.label..), 
+                        size = 4) +
   labs(x = "CSF GAP-43 (pg/mL)", y = "Composite Episodic Memory\n(z-score)", title = "") +
   theme_apa() +
   theme(axis.title.x = element_text(size = 12),
@@ -686,19 +616,23 @@ a
 ## Main effect of hippocampal ROIs (panel B)
 
 # create residuals
-resid_memory <- residuals(lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_hc))
-resid_hc <- residuals(lm(HC_ICV_norm ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_hc))
-resid_sub <- residuals(lm(Subiculum_sum_ICV ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_hc))
-resid_presub <- residuals(lm(Presubiculum_sum_ICV ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_hc))
-resid_dg <- residuals(lm(DG_sum_ICV ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_hc))
-resid_ca1 <- residuals(lm(CA1_sum_ICV ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_hc))
+resid_memory <- residuals(lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_qc))
+resid_hc <- residuals(lm(HC_ICV_norm ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_qc))
+resid_sub <- residuals(lm(Subiculum_sum_ICV ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_qc))
+resid_presub <- residuals(lm(Presubiculum_sum_ICV ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_qc))
+resid_dg <- residuals(lm(DG_sum_ICV ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_qc))
+resid_ca1 <- residuals(lm(CA1_sum_ICV ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group, data = all_data_qc))
 partial_df <- data.frame(resid_memory, resid_hc, resid_sub, resid_presub, resid_dg, resid_ca1)
 
 # create plots for panel B
-b1 <- ggplot(data = all_data_hc, aes(x = resid_hc, y = resid_memory)) +
+b1 <- ggplot(data = partial_df, aes(x = resid_hc, y = resid_memory)) +
   geom_point(color = "orange", alpha=.3) +
   geom_smooth(method = "lm", se = TRUE, color = "#E59F14") +
-  labs(x = "Total Hippocampal Volume", y = "Composite Episodic Memory\n(z-score)", title = "") +
+  stat_regline_equation(label.x = min(resid_hc), # where equation appears
+                        label.y = max(resid_memory) - 0.5, # where equation appears
+                        aes(label = ..eq.label..), 
+                        size = 4) +
+  labs(x = "Total Hippocampal\nVolume (cm³)", y = "Composite Episodic Memory\n(z-score)", title = "") +
   theme_apa() +
   theme(axis.title.x = element_text(size = 12),
         axis.title.y = element_text(size = 12),
@@ -707,40 +641,56 @@ b1 <- ggplot(data = all_data_hc, aes(x = resid_hc, y = resid_memory)) +
         plot.title.position = "panel"
   )
 
-b2 <- ggplot(data = all_data_hc, aes(x = resid_sub, y = resid_memory)) +
+b2 <- ggplot(data = partial_df, aes(x = resid_sub, y = resid_memory)) +
   geom_point(color = "orange", alpha=.3) +
   geom_smooth(method = "lm", se = TRUE, color = "#E59F14") +
-  labs(x = "Subiculum Volume", y = "Composite Episodic Memory\n(z-score)", title = "") +
+  stat_regline_equation(label.x = min(resid_sub), # where equation appears
+                        label.y = max(resid_memory) - 0.5, # where equation appears
+                        aes(label = ..eq.label..), 
+                        size = 4) +
+  labs(x = "Subiculum Volume (cm³)", y = "Composite Episodic Memory\n(z-score)") +
   theme_apa() +
   theme(axis.title.x = element_text(size = 12),
         axis.title.y = element_text(size = 12),
         axis.text = element_text(size = 12)
   )
 
-b3 <- ggplot(data = all_data_hc, aes(x = resid_presub, y = resid_memory)) +
+b3 <- ggplot(data = partial_df, aes(x = resid_presub, y = resid_memory)) +
   geom_point(color = "orange", alpha=.3) +
   geom_smooth(method = "lm", se = TRUE, color = "#E59F14") +
-  labs(x = "Presubiculum Volume", y = "Composite Episodic Memory\n(z-score)", title = "") +
+  stat_regline_equation(label.x = min(resid_presub), # where equation appears
+                        label.y = max(resid_memory) - 0.5, # where equation appears
+                        aes(label = ..eq.label..), 
+                        size = 4) +
+  labs(x = "Presubiculum Volume (cm³)", y = "Composite Episodic Memory\n(z-score)") +
   theme_apa() +
   theme(axis.title.x = element_text(size = 12),
         axis.title.y = element_text(size = 12),
         axis.text = element_text(size = 12)
   )
 
-b4 <- ggplot(data = all_data_hc, aes(x = resid_dg, y = resid_memory)) +
+b4 <- ggplot(data = partial_df, aes(x = resid_dg, y = resid_memory)) +
   geom_point(color = "orange", alpha=.3) +
   geom_smooth(method = "lm", se = TRUE, color = "#E59F14") +
-  labs(x = "Dentate Gyrus Volume", y = "Composite Episodic Memory\n(z-score)", title = "") +
+  stat_regline_equation(label.x = min(resid_dg), # where equation appears
+                        label.y = max(resid_memory) - 0.5, # where equation appears
+                        aes(label = ..eq.label..), 
+                        size = 4) +
+  labs(x = "Dentate Gyrus Volume (cm³)", y = "Composite Episodic Memory\n(z-score)") +
   theme_apa() +
   theme(axis.title.x = element_text(size = 12),
         axis.title.y = element_text(size = 12),
         axis.text = element_text(size = 12)
   )
 
-b5 <- ggplot(data = all_data_hc, aes(x = resid_ca1, y = resid_memory)) +
+b5 <- ggplot(data = partial_df, aes(x = resid_ca1, y = resid_memory)) +
   geom_point(color = "orange", alpha=.3) +
   geom_smooth(method = "lm", se = TRUE, color = "#E59F14") +
-  labs(x = "CA1 Volume", y = "Composite Episodic Memory\n(z-score)", title = "") +
+  stat_regline_equation(label.x = min(resid_ca1), # where equation appears
+                        label.y = max(resid_memory) - 0.5, # where equation appears
+                        aes(label = ..eq.label..), 
+                        size = 4) +
+  labs(x = "CA1 Volume (cm³)", y = "Composite Episodic Memory\n(z-score)") +
   theme_apa() +
   theme(axis.title.x = element_text(size = 12),
         axis.title.y = element_text(size = 12),
@@ -766,24 +716,24 @@ ggsave("data/Figure1.jpg",
 # CATEGORICAL MODERATOR FOR VISUALIZATION PURPOSES
 
 # create new categorical variables so that above 0.5 = +1SD group, -0.5 - 0.5 SD = mean group, and below -0.5 = -1SD group
-all_data_hc$cat_totalhc <- ifelse(all_data_hc$HC_ICV_norm > 0.5, "+1 SD", ifelse(
-                                    all_data_hc$HC_ICV_norm < -0.5, "-1 SD", "Mean"))
-all_data_hc$cat_totalhc <- factor(all_data_hc$cat_totalhc, levels = c("+1 SD", "Mean", "-1 SD"))
+all_data_qc$cat_totalhc <- ifelse(all_data_qc$HC_ICV_norm > 0.5, "+1 SD", ifelse(
+  all_data_qc$HC_ICV_norm < -0.5, "-1 SD", "Mean"))
+all_data_qc$cat_totalhc <- factor(all_data_qc$cat_totalhc, levels = c("+1 SD", "Mean", "-1 SD"))
 
-all_data_hc$cat_sub <- ifelse(all_data_hc$Subiculum_sum_ICV > 0.5, "+1 SD", ifelse(
-                                all_data_hc$Subiculum_sum_ICV < -0.5, "-1 SD", "Mean"))
-all_data_hc$cat_sub <- factor(all_data_hc$cat_sub, levels = c("+1 SD", "Mean", "-1 SD"))
+all_data_qc$cat_sub <- ifelse(all_data_qc$Subiculum_sum_ICV > 0.5, "+1 SD", ifelse(
+  all_data_qc$Subiculum_sum_ICV < -0.5, "-1 SD", "Mean"))
+all_data_qc$cat_sub <- factor(all_data_qc$cat_sub, levels = c("+1 SD", "Mean", "-1 SD"))
 
-all_data_hc$cat_presub <- ifelse(all_data_hc$Presubiculum_sum_ICV > 0.5, "+1 SD", ifelse(
-                                all_data_hc$Presubiculum_sum_ICV < -0.5, "-1 SD", "Mean"))
-all_data_hc$cat_presub <- factor(all_data_hc$cat_presub, levels = c("+1 SD", "Mean", "-1 SD"))
+all_data_qc$cat_presub <- ifelse(all_data_qc$Presubiculum_sum_ICV > 0.5, "+1 SD", ifelse(
+  all_data_qc$Presubiculum_sum_ICV < -0.5, "-1 SD", "Mean"))
+all_data_qc$cat_presub <- factor(all_data_qc$cat_presub, levels = c("+1 SD", "Mean", "-1 SD"))
 
-all_data_hc$cat_dg <- ifelse(all_data_hc$DG_sum_ICV > 0.5, "+1 SD", ifelse(
-                              all_data_hc$DG_sum_ICV < -0.5, "-1 SD", "Mean"))
-all_data_hc$cat_dg <- factor(all_data_hc$cat_dg, levels = c("+1 SD", "Mean", "-1 SD"))
+all_data_qc$cat_dg <- ifelse(all_data_qc$DG_sum_ICV > 0.5, "+1 SD", ifelse(
+  all_data_qc$DG_sum_ICV < -0.5, "-1 SD", "Mean"))
+all_data_qc$cat_dg <- factor(all_data_qc$cat_dg, levels = c("+1 SD", "Mean", "-1 SD"))
 
 # run linear models (need to do with variables as numeric)
-all_data_hc <- all_data_hc %>%
+all_data_qc <- all_data_qc %>%
   mutate(
     AGE_norm = as.numeric(AGE_norm),
     PTEDUCAT_norm = as.numeric(PTEDUCAT_norm),
@@ -794,10 +744,10 @@ all_data_hc <- all_data_hc %>%
     DG_sum_ICV = as.numeric(DG_sum_ICV)
   )
 
-intx_hc <- lm(all_data_hc$ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + HC_ICV_norm*GAP43_log_norm, data=all_data_hc)
-intx_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Subiculum_sum_ICV, data=all_data_hc)
-presub_intx <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Presubiculum_sum_ICV, data=all_data_hc)
-intx_dg <- lm(all_data_hc$ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + DG_sum_ICV*GAP43_log_norm, data=all_data_hc)
+intx_hc <- lm(all_data_qc$ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + HC_ICV_norm*GAP43_log_norm, data=all_data_qc)
+intx_sub <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Subiculum_sum_ICV, data=all_data_qc)
+presub_intx <- lm(ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + GAP43_log_norm*Presubiculum_sum_ICV, data=all_data_qc)
+intx_dg <- lm(all_data_qc$ADNI_MEM ~ AGE_norm + PTEDUCAT_norm + PTGENDER + APOE4 + ATN_group + DG_sum_ICV*GAP43_log_norm, data=all_data_qc)
 
 # get coefficients from model
 coef.hc <- coef(intx_hc)
@@ -806,8 +756,8 @@ coef.presub <- coef(presub_intx)
 coef.dg <- coef(intx_dg)
 
 # define levels of hc volume (+/- 1SD, mean)
-mean_hc <- mean(all_data_hc$HC_ICV_norm, na.rm = TRUE)
-sd_hc <- sd(all_data_hc$HC_ICV_norm, na.rm = TRUE)
+mean_hc <- mean(all_data_qc$HC_ICV_norm, na.rm = TRUE)
+sd_hc <- sd(all_data_qc$HC_ICV_norm, na.rm = TRUE)
 hc_levels <- c(mean_hc - sd_hc, mean_hc, mean_hc + sd_hc)
 regression_data.hc <- data.frame(
   cat_totalhc = factor(c("-1 SD", "Mean", "+1 SD"), levels = c("+1 SD", "Mean", "-1 SD")),
@@ -815,8 +765,8 @@ regression_data.hc <- data.frame(
   slope = coef.hc["GAP43_log_norm"] + coef.hc["HC_ICV_norm:GAP43_log_norm"] * hc_levels
 )
 
-mean_sub <- mean(all_data_hc$Subiculum_sum_ICV, na.rm = TRUE)
-sd_sub <- sd(all_data_hc$Subiculum_sum_ICV, na.rm = TRUE)
+mean_sub <- mean(all_data_qc$Subiculum_sum_ICV, na.rm = TRUE)
+sd_sub <- sd(all_data_qc$Subiculum_sum_ICV, na.rm = TRUE)
 sub_levels <- c(mean_sub - sd_sub, mean_sub, mean_sub + sd_sub)
 regression_data.sub <- data.frame(
   cat_sub = factor(c("-1 SD", "Mean", "+1 SD"), levels = c("+1 SD", "Mean", "-1 SD")),
@@ -824,8 +774,8 @@ regression_data.sub <- data.frame(
   slope = coef.sub["GAP43_log_norm"] + coef.sub["GAP43_log_norm:Subiculum_sum_ICV"] * sub_levels
 )
 
-mean_presub <- mean(all_data_hc$Presubiculum_sum_ICV, na.rm = TRUE)
-sd_presub <- sd(all_data_hc$Presubiculum_sum_ICV, na.rm = TRUE)
+mean_presub <- mean(all_data_qc$Presubiculum_sum_ICV, na.rm = TRUE)
+sd_presub <- sd(all_data_qc$Presubiculum_sum_ICV, na.rm = TRUE)
 presub_levels <- c(mean_presub - sd_presub, mean_presub, mean_presub + sd_presub)
 regression_data.presub <- data.frame(
   cat_presub = factor(c("-1 SD", "Mean", "+1 SD"), levels = c("+1 SD", "Mean", "-1 SD")),
@@ -833,8 +783,8 @@ regression_data.presub <- data.frame(
   slope = coef.presub["GAP43_log_norm"] + coef.presub["GAP43_log_norm:Presubiculum_sum_ICV"] * presub_levels
 )
 
-mean_dg <- mean(all_data_hc$DG_sum_ICV, na.rm = TRUE)
-sd_dg <- sd(all_data_hc$DG_sum_ICV, na.rm = TRUE)
+mean_dg <- mean(all_data_qc$DG_sum_ICV, na.rm = TRUE)
+sd_dg <- sd(all_data_qc$DG_sum_ICV, na.rm = TRUE)
 dg_levels <- c(mean_dg - sd_dg, mean_dg, mean_dg + sd_dg)
 regression_data.dg <- data.frame(
   cat_dg = factor(c("-1 SD", "Mean", "+1 SD"), levels = c("+1 SD", "Mean", "-1 SD")),
@@ -843,7 +793,7 @@ regression_data.dg <- data.frame(
 )
 
 # create plot
-p1 <- ggplot(data = all_data_hc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = cat_totalhc, shape = cat_totalhc, linetype = cat_totalhc)) +
+p1 <- ggplot(data = all_data_qc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = cat_totalhc, shape = cat_totalhc, linetype = cat_totalhc)) +
   geom_point(alpha = .3, size = 2.5) +
   geom_abline(data = regression_data.hc, aes(intercept = intercept, slope = slope, color = cat_totalhc, linetype = cat_totalhc), 
               size = 1.25, show.legend = FALSE) +
@@ -861,10 +811,11 @@ p1 <- ggplot(data = all_data_hc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = c
         axis.title.x = element_text(size = 14),
         axis.title.y = element_text(size = 14),
         axis.text = element_text(size = 14),
-        legend.title=element_text(size=14)) + 
+        legend.title=element_text(size=16),
+        legend.text=element_text(size=16)) + 
   guides(shape = guide_legend(override.aes = list(size = 5)))
 
-p2 <- ggplot(data = all_data_hc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = cat_sub, shape = cat_sub, linetype = cat_sub)) +
+p2 <- ggplot(data = all_data_qc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = cat_sub, shape = cat_sub, linetype = cat_sub)) +
   geom_point(alpha = .3, size = 2.5) +
   geom_abline(data = regression_data.sub, aes(intercept = intercept, slope = slope, color = cat_sub, linetype = cat_sub), 
               size = 1.25, show.legend = FALSE) +
@@ -882,10 +833,11 @@ p2 <- ggplot(data = all_data_hc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = c
         axis.title.x = element_text(size = 14),
         axis.title.y = element_text(size = 14),
         axis.text = element_text(size = 14),
-        legend.title=element_text(size=14)) + 
+        legend.title=element_text(size=16),
+        legend.text=element_text(size=16)) + 
   guides(shape = guide_legend(override.aes = list(size = 5)))
 
-p3 <- ggplot(data = all_data_hc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = cat_presub, shape = cat_presub, linetype = cat_presub)) +
+p3 <- ggplot(data = all_data_qc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = cat_presub, shape = cat_presub, linetype = cat_presub)) +
   geom_point(alpha = .3, size = 2.5) +
   geom_abline(data = regression_data.presub, aes(intercept = intercept, slope = slope, color = cat_presub, linetype = cat_presub), 
               size = 1.25, show.legend = FALSE) +
@@ -903,10 +855,11 @@ p3 <- ggplot(data = all_data_hc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = c
         axis.title.x = element_text(size = 14),
         axis.title.y = element_text(size = 14),
         axis.text = element_text(size = 14),
-        legend.title=element_text(size=14)) + 
+        legend.title=element_text(size=16), 
+        legend.text=element_text(size=16)) + 
   guides(shape = guide_legend(override.aes = list(size = 5)))
 
-p4 <- ggplot(data = all_data_hc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = cat_dg, shape = cat_dg, linetype = cat_dg)) +
+p4 <- ggplot(data = all_data_qc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = cat_dg, shape = cat_dg, linetype = cat_dg)) +
   geom_point(alpha = .3, size = 2.5) +
   geom_abline(data = regression_data.dg, aes(intercept = intercept, slope = slope, color = cat_dg, linetype = cat_dg), 
               size = 1.25, show.legend = FALSE) +
@@ -924,7 +877,8 @@ p4 <- ggplot(data = all_data_hc, aes(x = GAP43_log_norm, y = ADNI_MEM, color = c
         axis.title.x = element_text(size = 14),
         axis.title.y = element_text(size = 14),
         axis.text = element_text(size = 14),
-        legend.title=element_text(size=14)) + 
+        legend.title=element_text(size=16),
+        legend.text=element_text(size=16)) + 
   guides(shape = guide_legend(override.aes = list(size = 5)))
 
 fig2 <- ggpubr::ggarrange(
@@ -936,6 +890,5 @@ fig2 <- ggpubr::ggarrange(
 )
 fig2
 
-ggsave("data/Figure2.jpg", fig2, width = 190, units = "mm", dpi = 300, bg = "white")
-
+ggsave("Figure2_REV.jpg", fig2, width = 250, units = "mm", dpi = 300, bg = "white")
 
